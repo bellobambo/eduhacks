@@ -61,6 +61,25 @@ contract Exam {
         questions.push(Question(_questionText, _options, _correctOption));
     }
 
+    function addQuestionsBatch(
+        string[] memory _questionTexts,
+        string[][] memory _options,
+        uint8[] memory _correctOptions
+    ) public {
+        require(msg.sender == lecturer, "Only lecturer can add questions");
+        require(
+            _questionTexts.length == _options.length &&
+                _options.length == _correctOptions.length,
+            "Array length mismatch"
+        );
+
+        for (uint256 i = 0; i < _questionTexts.length; i++) {
+            questions.push(
+                Question(_questionTexts[i], _options[i], _correctOptions[i])
+            );
+        }
+    }
+
     function submitAnswers(uint8[] memory _answers) public returns (uint256) {
         require(!hasSubmitted[msg.sender], "Already submitted");
         require(block.timestamp <= startTime + duration, "Exam time has ended");

@@ -42,6 +42,6 @@ main()
     process.exit(1);
   });
 
-// CourseFactory deployed to: 0xB94988fe226a2Ee1574C3335E69bac25f38a960C
+// CourseFactory deployed to: 0x18051371A6F270491fB042FaeA762446898827eF
 
-// Exam deployed to: 0x8E090bE859C4d96665854Ae2787990573889F19C
+// Exam deployed to: 0x51Ae025a060AFaf1B1e745Bb2AF5d07DF44AD836
