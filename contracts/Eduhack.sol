@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-// Shared struct
-struct Question {
-    string questionText;
-    string[] options;
-    uint8 correctOption;
-}
+contract LMS {
+    struct Question {
+        string questionText;
+        string[] options;
+        uint8 correctOption;
+    }
 
-contract Exam {
     struct Submission {
         address studentAddress;
         string studentName;
@@ -17,115 +16,30 @@ contract Exam {
         uint256 submissionTime;
     }
 
-    address public factory;
-    address public lecturer;
-    string public lecturerName;
-    string public examTitle;
-    uint256 public duration;
-    uint256 public startTime;
-    uint256 public courseId;
-
-    Question[] public questions;
-    Submission[] public submissions;
-    mapping(address => bool) public hasSubmitted;
-
-    event ExamSubmitted(
-        address indexed student,
-        string matricNumber,
-        uint256 score
-    );
-
-    constructor(
-        address _factory,
-        address _lecturer,
-        string memory _lecturerName,
-        string memory _examTitle,
-        uint256 _duration,
-        uint256 _courseId
-    ) {
-        factory = _factory;
-        lecturer = _lecturer;
-        lecturerName = _lecturerName;
-        examTitle = _examTitle;
-        duration = _duration;
-        startTime = block.timestamp;
-        courseId = _courseId;
+    struct Exam {
+        uint256 examId;
+        string examTitle;
+        uint256 duration;
+        uint256 startTime;
+        uint256 courseId;
+        address lecturer;
+        string lecturerName;
+        Question[] questions;
+        Submission[] submissions;
+        mapping(address => bool) hasSubmitted;
     }
 
-    function addQuestion(
-        string memory _questionText,
-        string[] memory _options,
-        uint8 _correctOption
-    ) public {
-        require(msg.sender == lecturer, "Only lecturer can add questions");
-        questions.push(Question(_questionText, _options, _correctOption));
+    struct Course {
+        uint256 courseId;
+        string title;
+        string description;
+        address lecturer;
+        string lecturerName;
+        uint256 creationDate;
+        uint256[] examIds;
+        mapping(address => bool) enrolledStudents;
     }
 
-    function addQuestionsBatch(
-        string[] memory _questionTexts,
-        string[][] memory _options,
-        uint8[] memory _correctOptions
-    ) public {
-        require(msg.sender == lecturer, "Only lecturer can add questions");
-        require(
-            _questionTexts.length == _options.length &&
-                _options.length == _correctOptions.length,
-            "Array length mismatch"
-        );
-
-        for (uint256 i = 0; i < _questionTexts.length; i++) {
-            questions.push(
-                Question(_questionTexts[i], _options[i], _correctOptions[i])
-            );
-        }
-    }
-
-    function submitAnswers(uint8[] memory _answers) public returns (uint256) {
-        require(!hasSubmitted[msg.sender], "Already submitted");
-        require(block.timestamp <= startTime + duration, "Exam time has ended");
-        require(_answers.length == questions.length, "Answer count mismatch");
-
-        (
-            address walletAddress,
-            string memory name,
-            string memory matricNumber,
-            bool isLecturer,
-
-        ) = CourseFactory(factory).getUserProfile(msg.sender);
-        // walletAddress is currently unused but kept for potential future use
-
-        require(!isLecturer, "Only students can submit");
-        require(
-            CourseFactory(factory).isStudentEnrolled(msg.sender, courseId),
-            "Not enrolled"
-        );
-
-        uint256 score = 0;
-        for (uint i = 0; i < questions.length; i++) {
-            if (_answers[i] == questions[i].correctOption) {
-                score++;
-            }
-        }
-
-        submissions.push(
-            Submission(msg.sender, name, matricNumber, score, block.timestamp)
-        );
-        hasSubmitted[msg.sender] = true;
-
-        emit ExamSubmitted(msg.sender, matricNumber, score);
-        return score;
-    }
-
-    function getQuestions() public view returns (Question[] memory) {
-        return questions;
-    }
-
-    function getSubmissions() public view returns (Submission[] memory) {
-        return submissions;
-    }
-}
-
-contract CourseFactory {
     struct UserProfile {
         address walletAddress;
         string name;
@@ -135,83 +49,37 @@ contract CourseFactory {
         mapping(uint256 => bool) enrolledCourses;
     }
 
-    struct Course {
-        address lecturer;
-        string lecturerName;
-        string title;
-        string description;
-        uint256 creationDate;
-        uint256 examCount;
-        mapping(uint256 => address) exams;
-        mapping(address => bool) enrolledStudents;
-    }
-
-    mapping(uint256 => Course) public courses;
     mapping(address => UserProfile) public userProfiles;
     mapping(string => address) public matricToAddress;
+
+    mapping(uint256 => Course) public courses;
+    uint256[] public courseIds;
     uint256 public courseCount;
 
+    mapping(uint256 => Exam) public exams;
+    uint256[] public examIds;
+    uint256 public examCount;
+
+    // Events
     event UserRegistered(
-        address indexed userAddress,
+        address indexed user,
         string name,
         string matricNumber,
         bool isLecturer,
         string mainCourse
     );
-    event CourseCreated(
-        uint256 indexed courseId,
-        address lecturer,
-        string title
-    );
-    event StudentEnrolled(
-        uint256 indexed courseId,
-        address studentAddress,
-        string studentName,
-        string matricNumber
-    );
-    event ExamCreated(
-        uint256 indexed courseId,
-        uint256 examId,
-        address examAddress
-    );
+    event CourseCreated(uint256 courseId, address lecturer, string title);
+    event StudentEnrolled(uint256 indexed courseId, address student);
+    event ExamCreated(uint256 examId, uint256 courseId, string title);
+    event ExamSubmitted(address student, string matricNumber, uint256 score);
 
-    function getUserProfile(
-        address _user
-    )
-        public
-        view
-        returns (
-            address walletAddress,
-            string memory name,
-            string memory matricNumber,
-            bool isLecturer,
-            string memory mainCourse
-        )
-    {
-        UserProfile storage profile = userProfiles[_user];
-        return (
-            profile.walletAddress,
-            profile.name,
-            profile.matricNumber,
-            profile.isLecturer,
-            profile.mainCourse
-        );
-    }
-
-    function isStudentEnrolled(
-        address _student,
-        uint256 _courseId
-    ) public view returns (bool) {
-        return courses[_courseId].enrolledStudents[_student];
-    }
-
+    // === USER ===
     function registerUser(
         string memory _name,
         string memory _matricNumber,
         bool _isLecturer,
         string memory _mainCourse
     ) public {
-        require(bytes(_name).length > 0, "Name cannot be empty");
         require(
             userProfiles[msg.sender].walletAddress == address(0),
             "Already registered"
@@ -222,15 +90,6 @@ contract CourseFactory {
             require(
                 matricToAddress[_matricNumber] == address(0),
                 "Matric in use"
-            );
-        } else {
-            require(
-                bytes(_matricNumber).length == 0,
-                "Lecturers don't need matric"
-            );
-            require(
-                bytes(_mainCourse).length == 0,
-                "Lecturers don't need main course"
             );
         }
 
@@ -254,77 +113,190 @@ contract CourseFactory {
         );
     }
 
+    function getUserProfile(
+        address _user
+    )
+        external
+        view
+        returns (address, string memory, string memory, bool, string memory)
+    {
+        UserProfile storage profile = userProfiles[_user];
+        return (
+            profile.walletAddress,
+            profile.name,
+            profile.matricNumber,
+            profile.isLecturer,
+            profile.mainCourse
+        );
+    }
+
+    // === COURSES ===
     function createCourse(
         string memory _title,
         string memory _description
     ) public {
         require(userProfiles[msg.sender].isLecturer, "Only lecturers allowed");
-        require(bytes(_title).length > 0, "Title required");
 
-        courseCount++;
-        Course storage c = courses[courseCount];
-        c.lecturer = msg.sender;
-        c.lecturerName = userProfiles[msg.sender].name;
-        c.title = _title;
-        c.description = _description;
-        c.creationDate = block.timestamp;
+        uint256 courseId = courseCount++;
+        Course storage newCourse = courses[courseId];
+        newCourse.courseId = courseId;
+        newCourse.title = _title;
+        newCourse.description = _description;
+        newCourse.lecturer = msg.sender;
+        newCourse.lecturerName = userProfiles[msg.sender].name;
+        newCourse.creationDate = block.timestamp;
 
-        emit CourseCreated(courseCount, msg.sender, _title);
+        courseIds.push(courseId);
+
+        emit CourseCreated(courseId, msg.sender, _title);
+    }
+
+    function getAllCourseIds() public view returns (uint256[] memory) {
+        return courseIds;
     }
 
     function enrollInCourse(uint256 _courseId) public {
         UserProfile storage profile = userProfiles[msg.sender];
         require(!profile.isLecturer, "Lecturers can't enroll");
-        require(_courseId > 0 && _courseId <= courseCount, "Invalid course ID");
+        require(_courseId < courseCount, "Invalid course");
         require(
             !courses[_courseId].enrolledStudents[msg.sender],
             "Already enrolled"
         );
-        require(bytes(profile.matricNumber).length > 0, "No matric");
 
         courses[_courseId].enrolledStudents[msg.sender] = true;
         profile.enrolledCourses[_courseId] = true;
 
-        emit StudentEnrolled(
-            _courseId,
-            msg.sender,
-            profile.name,
-            profile.matricNumber
-        );
+        emit StudentEnrolled(_courseId, msg.sender);
     }
 
+    function isStudentEnrolled(
+        address _student,
+        uint256 _courseId
+    ) public view returns (bool) {
+        return courses[_courseId].enrolledStudents[_student];
+    }
+
+    function getCourseExamIds(
+        uint256 _courseId
+    ) public view returns (uint256[] memory) {
+        return courses[_courseId].examIds;
+    }
+
+    // === EXAMS ===
     function createExam(
         uint256 _courseId,
         string memory _examTitle,
         uint256 _duration
-    ) public returns (address) {
-        require(
-            courses[_courseId].lecturer == msg.sender,
-            "Not course lecturer"
-        );
-        require(bytes(_examTitle).length > 0, "Title required");
+    ) public {
+        Course storage course = courses[_courseId];
+        require(course.lecturer == msg.sender, "Not course lecturer");
 
-        Exam newExam = new Exam(
-            address(this),
-            msg.sender,
-            userProfiles[msg.sender].name,
-            _examTitle,
-            _duration,
-            _courseId
-        );
+        uint256 examId = examCount++;
+        Exam storage newExam = exams[examId];
+        newExam.examId = examId;
+        newExam.examTitle = _examTitle;
+        newExam.duration = _duration;
+        newExam.startTime = block.timestamp;
+        newExam.courseId = _courseId;
+        newExam.lecturer = msg.sender;
+        newExam.lecturerName = course.lecturerName;
 
-        uint256 examId = courses[_courseId].examCount;
-        courses[_courseId].exams[examId] = address(newExam);
-        courses[_courseId].examCount++;
+        course.examIds.push(examId);
+        examIds.push(examId);
 
-        emit ExamCreated(_courseId, examId, address(newExam));
-        return address(newExam);
+        emit ExamCreated(examId, _courseId, _examTitle);
     }
 
-    function getExamAddress(
-        uint256 _courseId,
+    function getAllExamIds() public view returns (uint256[] memory) {
+        return examIds;
+    }
+
+    function addQuestion(
+        uint256 _examId,
+        string memory _questionText,
+        string[] memory _options,
+        uint8 _correctOption
+    ) public {
+        Exam storage exam = exams[_examId];
+        require(exam.lecturer == msg.sender, "Not exam lecturer");
+        exam.questions.push(Question(_questionText, _options, _correctOption));
+    }
+
+    function addQuestionsBatch(
+        uint256 _examId,
+        string[] memory _questionTexts,
+        string[][] memory _options,
+        uint8[] memory _correctOptions
+    ) public {
+        require(
+            _questionTexts.length == _options.length &&
+                _options.length == _correctOptions.length,
+            "Array mismatch"
+        );
+        Exam storage exam = exams[_examId];
+        require(exam.lecturer == msg.sender, "Not exam lecturer");
+
+        for (uint i = 0; i < _questionTexts.length; i++) {
+            exam.questions.push(
+                Question(_questionTexts[i], _options[i], _correctOptions[i])
+            );
+        }
+    }
+
+    function submitAnswers(
+        uint256 _examId,
+        uint8[] memory _answers
+    ) public returns (uint256) {
+        Exam storage exam = exams[_examId];
+        require(!exam.hasSubmitted[msg.sender], "Already submitted");
+        require(
+            block.timestamp <= exam.startTime + exam.duration,
+            "Exam ended"
+        );
+        require(
+            _answers.length == exam.questions.length,
+            "Answer count mismatch"
+        );
+
+        UserProfile storage profile = userProfiles[msg.sender];
+        require(!profile.isLecturer, "Only students");
+        require(
+            courses[exam.courseId].enrolledStudents[msg.sender],
+            "Not enrolled"
+        );
+
+        uint256 score = 0;
+        for (uint i = 0; i < _answers.length; i++) {
+            if (_answers[i] == exam.questions[i].correctOption) {
+                score++;
+            }
+        }
+
+        exam.submissions.push(
+            Submission(
+                msg.sender,
+                profile.name,
+                profile.matricNumber,
+                score,
+                block.timestamp
+            )
+        );
+        exam.hasSubmitted[msg.sender] = true;
+
+        emit ExamSubmitted(msg.sender, profile.matricNumber, score);
+        return score;
+    }
+
+    function getExamQuestions(
         uint256 _examId
-    ) public view returns (address) {
-        return courses[_courseId].exams[_examId];
+    ) public view returns (Question[] memory) {
+        return exams[_examId].questions;
+    }
+
+    function getExamSubmissions(
+        uint256 _examId
+    ) public view returns (Submission[] memory) {
+        return exams[_examId].submissions;
     }
 }
