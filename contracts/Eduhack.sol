@@ -91,6 +91,10 @@ contract LMS {
                 matricToAddress[_matricNumber] == address(0),
                 "Matric in use"
             );
+            require(
+                bytes(_mainCourse).length > 0,
+                "Course required for students"
+            );
         }
 
         UserProfile storage profile = userProfiles[msg.sender];
@@ -98,7 +102,7 @@ contract LMS {
         profile.name = _name;
         profile.matricNumber = _isLecturer ? "" : _matricNumber;
         profile.isLecturer = _isLecturer;
-        profile.mainCourse = _isLecturer ? "" : _mainCourse;
+        profile.mainCourse = _mainCourse; // Store course for both roles
 
         if (!_isLecturer) {
             matricToAddress[_matricNumber] = msg.sender;
@@ -111,6 +115,17 @@ contract LMS {
             _isLecturer,
             _mainCourse
         );
+    }
+
+    function deleteUser() public {
+        UserProfile storage profile = userProfiles[msg.sender];
+        require(profile.walletAddress != address(0), "User not registered");
+
+        if (!profile.isLecturer && bytes(profile.matricNumber).length > 0) {
+            delete matricToAddress[profile.matricNumber];
+        }
+
+        delete userProfiles[msg.sender];
     }
 
     function getUserProfile(
