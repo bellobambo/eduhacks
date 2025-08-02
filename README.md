@@ -17,3 +17,6 @@ npx hardhat compile
 
 deploy :
 npx hardhat run scripts/deploy.js --network sepolia
+
+verify contract :
+npx hardhat verify --network sepolia <contract address>
